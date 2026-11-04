@@ -1,0 +1,20 @@
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "certiprec"
+version = "0.1.0"
+description = "Hamiltonian-certified adaptive BF16xk precision for machine-learning interatomic potentials"
+license = {text = "MIT"}
+requires-python = ">=3.9"
+dependencies = ["torch>=2.0", "numpy", "matplotlib"]
+
+[project.optional-dependencies]
+test = ["pytest"]
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+pythonpath = ["src"]

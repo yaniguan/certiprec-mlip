@@ -1,0 +1,6 @@
+# v0 evidence-chain config (mirrors scripts/run_v0.py defaults)
+system: {type: lj_shifted_force, n_atoms: 108, density: 0.8, rc: 2.5, units: lj_reduced}
+mlip: {n_rbf: 16, width: 64, depth: 3, epochs: 1500, force_weight: 10}
+nve: {dt: 0.004, steps: 10000, seeds: 3, kT_init: 0.9}
+schemes: [fp64, fp32, tf32, bf16x1, bf16x3, bf16x6, bf16x9, certiprec]
+certificate: {target_rms: "0.5 * predicted walk of uniform bf16x3"}
