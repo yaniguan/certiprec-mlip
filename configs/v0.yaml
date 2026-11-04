@@ -1,6 +1,7 @@
-# v0 evidence-chain config (mirrors scripts/run_v0.py defaults)
-system: {type: lj_shifted_force, n_atoms: 108, density: 0.8, rc: 2.5, units: lj_reduced}
-mlip: {n_rbf: 16, width: 64, depth: 3, epochs: 1500, force_weight: 10}
-nve: {dt: 0.004, steps: 10000, seeds: 3, kT_init: 0.9}
-schemes: [fp64, fp32, tf32, bf16x1, bf16x3, bf16x6, bf16x9, certiprec]
-certificate: {target_rms: "0.5 * predicted walk of uniform bf16x3"}
+# Descriptive defaults; scripts/run_v0.py accepts command-line flags directly.
+system: {type: free_lj_cluster, n_atoms: 8, rc: 2.5, units: lj_reduced}
+mlip: {n_rbf: 12, width: 4, l_max: 1, correlation: 2, fit: fixed_features_linear_readout, n_configs: 60}
+nve: {dt: 0.002, steps: 600, seeds: 3, initial_velocity_std: 0.05}
+schemes: [fp32, tf32, bf16x1, bf16x2, bf16x3, bf16x6]
+certificate: {scope: finite_calibration_set, n_configs: 3, heldout_audit_configs: 9}
+gpu: PENDING

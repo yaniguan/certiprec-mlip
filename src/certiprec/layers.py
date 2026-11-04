@@ -1,6 +1,7 @@
 import torch
 from torch import nn
-from .precision import emu_matmul
+from .precision import emu_matmul, products
+from .profiling import layer_timer
 
 
 class PrecLinear(nn.Linear):
@@ -8,13 +9,14 @@ class PrecLinear(nn.Linear):
     scheme: str = "fp32"
 
     def forward(self, x):
-        y = emu_matmul(x, self.weight.t().to(x.dtype) if self.scheme in ("fp32", "fp64")
-                       else self.weight.t(), self.scheme)
-        return y.to(x.dtype) + self.bias.to(x.dtype)
+        with layer_timer(getattr(self, 'profile_name', 'linear'),
+                         2 * x.numel() * self.out_features * products(self.scheme)):
+            y = emu_matmul(x, self.weight.t().to(x.dtype), self.scheme)
+        return y.to(x.dtype) + (self.bias.to(x.dtype) if self.bias is not None else 0)
 
 
 def prec_layers(model):
-    return [m for m in model.modules() if isinstance(m, PrecLinear)]
+    return [m for m in model.modules() if isinstance(m, PrecLinear) or getattr(m, "precision_layer", False)]
 
 
 def set_schemes(model, schemes):

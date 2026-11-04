@@ -49,3 +49,15 @@ def sample_configs(n_cfg=400, temps=(0.6, 0.9, 1.2, 1.6), dt=0.004, every=25, se
             if step >= 500 and step % every == 0:
                 X.append(pos.copy()); E.append(e); F.append(f.copy())
     return np.array(X), np.array(E), np.array(F), box
+
+
+def cluster_configs(n_cfg=60, seed=0):
+    """Eight-atom free cluster, small distortions of a cube, LJ reduced units."""
+    rng = np.random.default_rng(seed)
+    base = np.array(list(__import__('itertools').product((0., 1.), repeat=3)))
+    configs, energies, forces = [], [], []
+    for _ in range(n_cfg):
+        pos = (base - .5) * rng.uniform(1.18, 1.38) + rng.normal(0, .025, base.shape)
+        e, f = lj_energy_forces(pos, 100.)
+        configs.append(pos); energies.append(e); forces.append(f)
+    return np.array(configs), np.array(energies), np.array(forces), None

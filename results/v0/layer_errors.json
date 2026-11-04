@@ -1,0 +1,143 @@
+{
+  "meta": {
+    "run_id": "566e7c0cc7b964c6",
+    "source_hash": "e17c3dc0180b1f08",
+    "config": {
+      "steps": 600,
+      "dt": 0.002,
+      "seeds": 3,
+      "configs": 60,
+      "threads": 1,
+      "force_budget": null,
+      "quick": false
+    },
+    "torch": "2.15.0+cpu",
+    "numpy": "2.5.4",
+    "cuequivariance": "0.13.0",
+    "device": "cpu",
+    "gpu_status": "PENDING",
+    "date_utc": "2026-11-04T08:03:04Z"
+  },
+  "seconds": 0.7410590710060205,
+  "data": {
+    "reference": "FP32 same model",
+    "n_configs": 12,
+    "layer_names": [
+      "spherical_harmonics",
+      "edge_tensor_product",
+      "atom_linear",
+      "quadratic_invariants",
+      "readout"
+    ],
+    "uniform": {
+      "bf16x1": {
+        "energy_rmse_per_atom": 0.0009473934198245604,
+        "force_rmse": 0.004773488516852035
+      },
+      "bf16x2": {
+        "energy_rmse_per_atom": 0.0008402478117832098,
+        "force_rmse": 0.003599484354023945
+      },
+      "bf16x3": {
+        "energy_rmse_per_atom": 2.740895680849035e-06,
+        "force_rmse": 6.4727402239019704e-06
+      },
+      "bf16x6": {
+        "energy_rmse_per_atom": 8.070507054165959e-08,
+        "force_rmse": 2.0405010996392418e-07
+      }
+    },
+    "per_layer": {
+      "spherical_harmonics": {
+        "bf16x1": {
+          "energy_rmse_per_atom": 5.344224823024795e-05,
+          "force_rmse": 0.0003578397980597956
+        },
+        "bf16x2": {
+          "energy_rmse_per_atom": 1.2840824385671251e-05,
+          "force_rmse": 0.0001812738089886086
+        },
+        "bf16x3": {
+          "energy_rmse_per_atom": 1.2166747166629524e-07,
+          "force_rmse": 5.945648382237504e-07
+        }
+      },
+      "edge_tensor_product": {
+        "bf16x1": {
+          "energy_rmse_per_atom": 3.934297503085128e-05,
+          "force_rmse": 0.0006317237672255232
+        },
+        "bf16x2": {
+          "energy_rmse_per_atom": 3.934297503085128e-05,
+          "force_rmse": 0.000640328593235975
+        },
+        "bf16x3": {
+          "energy_rmse_per_atom": 9.733397733303619e-08,
+          "force_rmse": 1.4720266195106386e-06
+        }
+      },
+      "atom_linear": {
+        "bf16x1": {
+          "energy_rmse_per_atom": 0.00016813407121388707,
+          "force_rmse": 0.0016355839567471784
+        },
+        "bf16x2": {
+          "energy_rmse_per_atom": 7.20514808297793e-05,
+          "force_rmse": 0.0008843235209027155
+        },
+        "bf16x3": {
+          "energy_rmse_per_atom": 3.5094264611911163e-07,
+          "force_rmse": 4.709313124303942e-06
+        }
+      },
+      "quadratic_invariants": {
+        "bf16x1": {
+          "energy_rmse_per_atom": 7.234759141205953e-05,
+          "force_rmse": 0.0036032108126741657
+        },
+        "bf16x2": {
+          "energy_rmse_per_atom": 6.755277148709976e-05,
+          "force_rmse": 0.002365498593942697
+        },
+        "bf16x3": {
+          "energy_rmse_per_atom": 4.532827753444447e-07,
+          "force_rmse": 4.60490117424432e-06
+        }
+      },
+      "readout": {
+        "bf16x1": {
+          "energy_rmse_per_atom": 0.0006827932821586112,
+          "force_rmse": 0.003295935663982556
+        },
+        "bf16x2": {
+          "energy_rmse_per_atom": 0.0007411755673906706,
+          "force_rmse": 0.003295935663982556
+        },
+        "bf16x3": {
+          "energy_rmse_per_atom": 2.5627109268772314e-06,
+          "force_rmse": 4.549269779114133e-06
+        }
+      }
+    },
+    "rotation": {
+      "fp32": {
+        "energy_abs_error": 4.76837158203125e-07,
+        "force_rms_error": 6.104096391635425e-07
+      },
+      "bf16x1": {
+        "energy_abs_error": 0.0024886131286621094,
+        "force_rms_error": 0.002748724521970268
+      },
+      "bf16x3": {
+        "energy_abs_error": 2.384185791015625e-06,
+        "force_rms_error": 7.395021325414629e-06
+      }
+    },
+    "cue_torch_naive_max_abs_errors": {
+      "spherical_harmonics": 0.0,
+      "edge_tensor_product": 0.0,
+      "atom_linear": 4.76837158203125e-07,
+      "quadratic_invariants": 4.76837158203125e-07
+    }
+  }
+}

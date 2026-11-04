@@ -16,6 +16,8 @@ U_FP32 = 2.0 ** -24
 # scheme -> (number of slices, list of (i, j) slice products)
 SCHEMES = {
     "bf16x1": (1, [(0, 0)]),
+    # Asymmetric two-product scheme: refine X only. Same worst-case order as x1.
+    "bf16x2": (2, [(0, 0), (1, 0)]),
     "bf16x3": (2, [(0, 0), (0, 1), (1, 0)]),                    # FACTO / Henry et al.
     "bf16x6": (3, [(0, 0), (0, 1), (1, 0), (1, 1), (0, 2), (2, 0)]),
     "bf16x9": (3, [(i, j) for i in range(3) for j in range(3)]),
@@ -84,10 +86,9 @@ class _EmuMatmul(torch.autograd.Function):
         x, w = ctx.saved_tensors
         gx = gw = None
         if ctx.needs_input_grad[0]:   # force path: also emulated (as in FACTO)
-            gx = emu_matmul_raw(g, w.t(), ctx.scheme).to(x.dtype)
+            gx = emu_matmul_raw(g, w.transpose(-2, -1), ctx.scheme).sum_to_size(x.shape).to(x.dtype)
         if ctx.needs_input_grad[1]:
-            gw = emu_matmul_raw(x.reshape(-1, x.shape[-1]).t(),
-                                g.reshape(-1, g.shape[-1]), ctx.scheme).to(w.dtype)
+            gw = emu_matmul_raw(x.transpose(-2, -1), g, ctx.scheme).sum_to_size(w.shape).to(w.dtype)
         return gx, gw, None
 
 
@@ -98,18 +99,22 @@ def emu_matmul(x, w, scheme: str):
 
 
 def gamma(n: int, u: float) -> float:
+    if n * u >= 1:
+        raise ValueError("Accumulation length is too large for this error bound.")
     return n * u / (1 - n * u)
 
 
 def error_bound(x: torch.Tensor, w: torch.Tensor, scheme: str) -> torch.Tensor:
     """A-priori elementwise bound |fl_s(XW) - XW| <= c_s(K) * (|X||W|).
 
-    Splitting truncation: slice k of x satisfies |x_k| <= u^k |x| (1+u)^k (RNE).
-    Omitted product (i,j) contributes <= u^(i+j)|X||W|; dropped tails of the
-    n-slice expansion contribute <= u^n. FP32 accumulation over K terms adds
-    gamma_K(u_fp32) (deterministic, worst case; probabilistic ~sqrt(K)u is
-    typically much tighter, see Higham & Mary 2019).
+    Assumes round-to-nearest, normal slice/product arithmetic, and no overflow.
+    Slice i has |x_i| <= (1+u) u^i |x|; the residual is <= u^n |x|.
+    Includes omitted pairs, residual tails, dot accumulation, and the FP32 sum
+    of retained products. Subnormal/overflow cases need additive error terms
+    and are outside this relative bound. See docs/DESIGN.md.
     """
+    if not bool(torch.isfinite(x).all() and torch.isfinite(w).all()):
+        raise ValueError("The bound requires finite operands without overflow/underflow.")
     K = x.shape[-1]
     absxw = x.abs().double() @ w.abs().double()
     acc = gamma(K + 2, U_FP32)
@@ -118,17 +123,19 @@ def error_bound(x: torch.Tensor, w: torch.Tensor, scheme: str) -> torch.Tensor:
     elif scheme == "fp32":
         c = acc
     elif scheme == "tf32":
-        c = 2 * U_TF32 + U_TF32 ** 2 + acc
+        c = 2 * U_TF32 + U_TF32 ** 2 + acc * (1 + U_TF32) ** 2
     else:
         n, pairs = SCHEMES[scheme]
-        u = U_BF16 * (1 + U_BF16)
+        u = U_BF16
         kept = set(pairs)
         c = 0.0
         for i in range(n + 1):
             for j in range(n + 1):
                 if (i, j) in kept:
                     continue
-                c += u ** (i + j) if (i < n and j < n) else 0.0
-        c += 2 * u ** n + u ** (2 * n)     # tails beyond the n slices
-        c += len(pairs) * acc
+                c += (1 + u) ** 2 * u ** (i + j) if (i < n and j < n) else 0.0
+        # Each residual after n slices is bounded by u**n |x|.
+        c += 2 * u ** n * (1 + u ** n) + u ** (2 * n)
+        mass = sum((1 + u) ** 2 * u ** (i + j) for i, j in pairs)
+        c += (acc + gamma(len(pairs), U_FP32) * (1 + acc)) * mass
     return c * absxw

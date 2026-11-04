@@ -1,0 +1,52 @@
+{
+  "meta": {
+    "run_id": "566e7c0cc7b964c6",
+    "source_hash": "e17c3dc0180b1f08",
+    "config": {
+      "steps": 600,
+      "dt": 0.002,
+      "seeds": 3,
+      "configs": 60,
+      "threads": 1,
+      "force_budget": null,
+      "quick": false
+    },
+    "torch": "2.15.0+cpu",
+    "numpy": "2.5.4",
+    "cuequivariance": "0.13.0",
+    "device": "cpu",
+    "gpu_status": "PENDING",
+    "date_utc": "2026-11-04T08:03:04Z"
+  },
+  "data": {
+    "steps": 600,
+    "dt": 0.002,
+    "seeds": 3,
+    "n_atoms": 8,
+    "units": "LJ reduced",
+    "hamiltonian": "FP64 evaluation of the same fitted model, not analytic LJ",
+    "initial_velocity_std": 0.05,
+    "summary": {
+      "fp32": {
+        "mean_abs_drift": 8.603077958583176e-06,
+        "mean_detrended_rms": 2.5983529776506798e-05,
+        "rms_final_dH": 4.1852189436071395e-05
+      },
+      "bf16x1": {
+        "mean_abs_drift": 0.0002721738776829498,
+        "mean_detrended_rms": 0.0009995535251477547,
+        "rms_final_dH": 0.0015548202102665402
+      },
+      "bf16x3": {
+        "mean_abs_drift": 7.615759885383922e-06,
+        "mean_detrended_rms": 2.584895136971981e-05,
+        "rms_final_dH": 3.853943652353335e-05
+      },
+      "certiprec": {
+        "mean_abs_drift": 4.1866233826397564e-05,
+        "mean_detrended_rms": 2.542091001767464e-05,
+        "rms_final_dH": 5.6514676036838314e-05
+      }
+    }
+  }
+}

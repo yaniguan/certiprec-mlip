@@ -1,4 +1,15 @@
 venv/
+.venv/
 __pycache__/
+*.py[cod]
 *.egg-info/
 .pytest_cache/
+.coverage
+htmlcov/
+.ipynb_checkpoints/
+*.pt
+*.pth
+results/gpu/raw/
+results/gpu/*.json
+!results/gpu/status.json
+*.trace.json

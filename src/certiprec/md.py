@@ -9,6 +9,8 @@ from .layers import set_schemes
 
 
 def run_nve(model, pos, vel, box, schemes, dt, n_steps, every=10):
+    if dt <= 0 or n_steps < 1 or every < 1:
+        raise ValueError("Need positive dt, n_steps and sampling interval.")
     ref_dtype = torch.float64
     def force(p):
         set_schemes(model, schemes)
@@ -27,7 +29,7 @@ def run_nve(model, pos, vel, box, schemes, dt, n_steps, every=10):
         pos += dt * vel
         f = force(pos)
         vel += 0.5 * dt * f
-        if step % every == 0:
+        if step % every == 0 or step == n_steps:
             ts.append(step * dt); hs.append(h_true(pos, vel))
     return np.array(ts), np.array(hs), pos, vel
 

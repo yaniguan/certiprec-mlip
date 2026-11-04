@@ -1,0 +1,109 @@
+{
+  "meta": {
+    "run_id": "566e7c0cc7b964c6",
+    "source_hash": "e17c3dc0180b1f08",
+    "config": {
+      "steps": 600,
+      "dt": 0.002,
+      "seeds": 3,
+      "configs": 60,
+      "threads": 1,
+      "force_budget": null,
+      "quick": false
+    },
+    "torch": "2.15.0+cpu",
+    "numpy": "2.5.4",
+    "cuequivariance": "0.13.0",
+    "device": "cpu",
+    "gpu_status": "PENDING",
+    "date_utc": "2026-11-04T08:03:04Z"
+  },
+  "seconds": 0.5009734519990161,
+  "data": {
+    "policy": [
+      "bf16x2",
+      "bf16x3",
+      "bf16x3",
+      "bf16x3",
+      "bf16x3"
+    ],
+    "cost": 165440,
+    "proposal_force_rms": 0.00017181587973156884,
+    "layer_names": [
+      "spherical_harmonics",
+      "edge_tensor_product",
+      "atom_linear",
+      "quadratic_invariants",
+      "readout"
+    ],
+    "fp32_floor_vs_fp64": 5.322698421566281e-07,
+    "force_budget": 0.00019921289209543348,
+    "budget_rule": "max(2*BF16x3 proposal, 0.03*BF16x1 proposal), unless specified",
+    "layer_flops_estimate": [
+      448,
+      40320,
+      6144,
+      7680,
+      704
+    ],
+    "per_layer_force_errors": {
+      "0:bf16x1": 0.0003580998038565976,
+      "0:bf16x2": 0.0001553099008772734,
+      "0:bf16x3": 7.114033966636761e-07,
+      "0:bf16x6": 5.323077275430395e-07,
+      "1:bf16x1": 0.0005256254870784294,
+      "1:bf16x2": 0.0005094449463518403,
+      "1:bf16x3": 1.0428209788972193e-06,
+      "1:bf16x6": 5.089028356329198e-07,
+      "2:bf16x1": 0.0012707456666670677,
+      "2:bf16x2": 0.0008860331295524552,
+      "2:bf16x3": 3.059102983713566e-06,
+      "2:bf16x6": 5.22718052419392e-07,
+      "3:bf16x1": 0.0015032477489919584,
+      "3:bf16x2": 0.0015330208360290222,
+      "3:bf16x3": 4.57395916151004e-06,
+      "3:bf16x6": 5.245395076950086e-07,
+      "4:bf16x1": 0.0029795174108674573,
+      "4:bf16x2": 0.0029795174108674573,
+      "4:bf16x3": 4.636476677234863e-06,
+      "4:bf16x6": 5.322698421566281e-07
+    },
+    "calibration_certificate": {
+      "scope": "checked configurations only; emulated backward forces",
+      "n_configs": 3,
+      "telescoping_terms": [
+        5.322698421566281e-07,
+        0.00015533479705136051,
+        1.016584937212152e-06,
+        2.7916432795780357e-06,
+        4.969933787472474e-06,
+        3.054055503380121e-06
+      ],
+      "force_rms_bound": 0.00016769928440115993,
+      "actual_force_rms": 0.00015603844385965972,
+      "max_force_l2": 0.0008185134895427001,
+      "budget": 0.00019921289209543348,
+      "budget_met": true,
+      "bound_holds": true
+    },
+    "heldout_audit": {
+      "scope": "checked configurations only; emulated backward forces",
+      "n_configs": 9,
+      "telescoping_terms": [
+        9.878786699487467e-07,
+        0.00018913123849677053,
+        1.5004887546882068e-06,
+        6.566718365311001e-06,
+        1.638847997104454e-05,
+        2.7731355017672955e-06
+      ],
+      "force_rms_bound": 0.00021734793975953032,
+      "actual_force_rms": 0.00018813522298122477,
+      "max_force_l2": 0.0016871177652840416,
+      "budget": 0.00019921289209543348,
+      "budget_met": false,
+      "bound_holds": true
+    },
+    "cost_relative_to_uniform_bf16x3": 0.9972993827160493
+  }
+}

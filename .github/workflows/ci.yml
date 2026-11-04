@@ -6,6 +6,10 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
-        with: {python-version: "3.11"}
-      - run: pip install torch --index-url https://download.pytorch.org/whl/cpu && pip install numpy matplotlib pytest
+        with: {python-version: '3.11'}
+      - run: pip install torch --index-url https://download.pytorch.org/whl/cpu
+      - run: pip install -e '.[test,reference]'
       - run: python -m pytest -q
+        env: {OMP_NUM_THREADS: '1', MKL_NUM_THREADS: '1'}
+      - run: python scripts/run_v0.py --quick --out /tmp/certiprec-smoke
+      - run: python scripts/make_figures.py /tmp/certiprec-smoke

@@ -1,112 +1,206 @@
-"""Reproduce the v0 evidence chain (CPU). Writes results/v0/*.json and figures."""
-import argparse, json, math, time, os, sys
+"""Bounded, resumable CPU evidence. Each completed experiment is written atomically."""
+import argparse
+import hashlib
+import json
+import math
+import os
+from pathlib import Path
+import sys
+import time
+
 import numpy as np
 import torch
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "src"))
-from certiprec import precision as P
-from certiprec.lj import sample_configs, lj_energy_forces
-from certiprec.train import train
-from certiprec.layers import set_schemes
-from certiprec import certify as C
-from certiprec.md import run_nve, drift_and_rms
+import cuequivariance as cue
 
-ap = argparse.ArgumentParser()
-ap.add_argument("--out", default="results/v0")
-ap.add_argument("--steps", type=int, default=10000)
-ap.add_argument("--dt", type=float, default=0.004)
-ap.add_argument("--seeds", type=int, default=3)
-ap.add_argument("--epochs", type=int, default=1500)
-ap.add_argument("--target_rms", type=float, default=None,
-                help="energy-walk tolerance per atom over the horizon (reduced units)")
-a = ap.parse_args()
-os.makedirs(a.out, exist_ok=True)
-torch.set_num_threads(4)
-R = {"meta": {"torch": torch.__version__, "device": "cpu", "date": time.strftime("%Y-%m-%d %H:%M %Z")}}
-SCH = ["fp32", "tf32", "bf16x1", "bf16x3", "bf16x6", "bf16x9"]
+sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'src'))
+from certiprec import certify as C, precision as P, profiling
+from certiprec.layers import prec_layers, set_schemes
+from certiprec.lj import cluster_configs
+from certiprec.md import drift_and_rms, run_nve
+from certiprec.train import fit_equivariant
 
-# (a) matmul error vs fp64 ------------------------------------------------------
-g = torch.Generator().manual_seed(0)
-mm = {}
-for K in (16, 64, 256, 1024):
-    X = torch.randn(256, K, generator=g); W = torch.randn(K, 256, generator=g) / math.sqrt(K)
-    ref = X.double() @ W.double()
-    mm[K] = {}
-    for s in SCH:
-        y = P.emu_matmul_raw(X, W, s).double()
-        rel = ((y - ref).norm() / ref.norm()).item()
-        bnd = P.error_bound(X, W, s)
-        mm[K][s] = {"rel_fro_err": rel, "max_abs_err": (y - ref).abs().max().item(),
-                    "bound_holds": bool(((y - ref).abs() <= bnd + 1e-30).all()),
-                    "bound_tightness_median": float(((y - ref).abs() / bnd).median())}
-R["a_matmul_error"] = mm
-print("(a) done", {s: mm[256][s]["rel_fro_err"] for s in SCH})
 
-# train MLIP on LJ ----------------------------------------------------------------
-t0 = time.time()
-Xc, Ec, Fc, box = sample_configs()
-model, tr = train(Xc, Ec, Fc, box, epochs=a.epochs)
-tr["train_seconds"] = time.time() - t0; tr["n_configs"] = len(Xc); tr["n_atoms"] = Xc.shape[1]
-R["mlip_fit"] = tr; print("fit", tr)
-torch.save(model.state_dict(), os.path.join(a.out, "mlip_lj.pt"))
-N = Xc.shape[1]
+def write(path, data):
+    temporary = path.with_suffix('.tmp')
+    temporary.write_text(json.dumps(data, indent=2, allow_nan=False) + '\n')
+    temporary.replace(path)
 
-# (b) force error per uniform scheme + sensitivity table ---------------------------
-test = [Xc[i] for i in range(0, len(Xc), 20)]
-ref = C.reference_forces(model, test, box)
-fe = {s: C.force_rms_error(model, test, box, s, ref) for s in SCH}
-R["b_force_rms_error_vs_fp64"] = fe; print("(b)", fe)
-floor, table, _ = C.sensitivity_table(model, test, box)
-R["sensitivity"] = {"fp32_floor": floor, "per_layer": {f"L{l}:{s}": v for (l, s), v in table.items()}}
 
-# certificate -> budget -> allocation ----------------------------------------------
-horizon = a.steps * a.dt; kT = 0.9
-flops = C.layer_flops(model, N)
-target = a.target_rms
-if target is None:
-    # Default tolerance: allow the energy walk of a force noise 1.5x the FP32 floor.
-    target = C.predict_energy_walk(1.5 * floor, horizon, a.dt, N, kT)
-budget = C.force_budget(target, horizon, a.dt, N, kT)
-alloc = C.allocate(floor, table, flops, budget)
-R["allocation"] = {"target_rms_per_atom": target, "force_budget": budget, **alloc,
-                   "layer_flops": flops}
-print("alloc", R["allocation"])
-pol = alloc["policy"]
-fe["certiprec"] = C.force_rms_error(model, test, box, pol, ref)
+def main():
+    ap = argparse.ArgumentParser(description=__doc__)
+    ap.add_argument('--out', default='results/v0')
+    ap.add_argument('--steps', type=int, default=600)
+    ap.add_argument('--dt', type=float, default=.002)
+    ap.add_argument('--seeds', type=int, default=3)
+    ap.add_argument('--configs', type=int, default=60)
+    ap.add_argument('--threads', type=int, default=1)
+    ap.add_argument('--force-budget', type=float)
+    ap.add_argument('--quick', action='store_true', help='120 steps, 30 fit configurations, still 3 seeds')
+    ap.add_argument('--no-resume', action='store_true')
+    ap.add_argument('--profile', action='store_true')
+    ap.add_argument('--torch-profiler', action='store_true', help='profile one force call; save small text table')
+    args = ap.parse_args()
+    if args.quick:
+        args.steps, args.configs = 120, 30
+    if args.steps < 10 or args.seeds < 1 or args.configs < 20 or args.dt <= 0:
+        ap.error('need steps >=10, seeds >=1, configs >=20 and dt >0')
+    torch.set_num_threads(args.threads)
+    profiling.enable(args.profile or os.getenv('CERTIPREC_PROFILE') == '1')
+    out = Path(args.out)
+    out.mkdir(parents=True, exist_ok=True)
+    sources = sorted((Path(__file__).resolve().parents[1] / 'src/certiprec').glob('*.py')) + [Path(__file__)]
+    digest = hashlib.sha256(b''.join(p.read_bytes() for p in sources)).hexdigest()[:16]
+    config = {k: v for k, v in vars(args).items() if k not in ('out', 'no_resume', 'profile', 'torch_profiler')}
+    versions = {'torch': str(torch.__version__), 'numpy': np.__version__, 'cuequivariance': cue.__version__}
+    run_id = hashlib.sha256((digest + json.dumps(config, sort_keys=True) + json.dumps(versions, sort_keys=True)).encode()).hexdigest()[:16]
+    started = time.perf_counter()
+    meta = {'run_id': run_id, 'source_hash': digest, 'config': config, **versions,
+            'device': 'cpu', 'gpu_status': 'PENDING', 'date_utc': time.strftime('%Y-%m-%dT%H:%M:%SZ', time.gmtime())}
 
-# (c) NVE ---------------------------------------------------------------------------
-pos0, _ = (Xc[len(Xc) // 2], None)
-policies = {"fp64": "fp64", **{s: s for s in SCH}, "certiprec": pol}
-nve = {k: {"drift": [], "rms": [], "final_abs_dH": []} for k in policies}
-traces = {}
-for seed in range(a.seeds):
-    rng = np.random.default_rng(100 + seed)
-    v0 = rng.standard_normal(pos0.shape) * math.sqrt(kT); v0 -= v0.mean(0)
-    for k, p in policies.items():
-        t1 = time.time()
-        ts, hs, _, _ = run_nve(model, pos0, v0, box, p, a.dt, a.steps)
-        d, r = drift_and_rms(ts, hs, N)
-        nve[k]["drift"].append(d); nve[k]["rms"].append(r)
-        nve[k]["final_abs_dH"].append(float(abs(hs[-1] - hs[0]) / N))
-        if seed == 0: traces[k] = (ts.tolist(), ((hs - hs[0]) / N).tolist())
-        print(f"seed {seed} {k:10s} drift={d:.3e} rms={r:.3e} ({time.time()-t1:.0f}s)", flush=True)
-for k in nve:
-    nve[k]["mean_abs_drift"] = float(np.mean(np.abs(nve[k]["drift"])))
-    nve[k]["geomean_rms"] = float(np.exp(np.mean(np.log(nve[k]["rms"]))))
-    nve[k]["rms_final_dH"] = float(np.sqrt(np.mean(np.square(nve[k]["final_abs_dH"]))))
-    s = fe.get(k)
-    nve[k]["predicted_walk"] = C.predict_energy_walk(s, horizon, a.dt, N, kT) if s else None
-R["c_nve"] = {"dt": a.dt, "steps": a.steps, "seeds": a.seeds, "kT_init": kT, "N": N, "units": "LJ reduced (eps, sigma, m)", "runs": nve}
-R["c_traces_seed0"] = traces
+    def stage(name, fn):
+        path = out / (name + '.json')
+        if path.exists() and not args.no_resume:
+            saved = json.loads(path.read_text())
+            if saved.get('meta', {}).get('run_id') == run_id:
+                print('resume', name, flush=True)
+                return saved['data']
+        tick = time.perf_counter()
+        data = fn()
+        write(path, {'meta': meta, 'seconds': time.perf_counter() - tick, 'data': data})
+        print('done', name, f'{time.perf_counter() - tick:.2f}s', flush=True)
+        return data
 
-# (d) cost model ------------------------------------------------------------------
-cost = {s: C.policy_cost(flops, [s] * len(flops)) for s in ["bf16x1", "bf16x3", "bf16x6", "bf16x9"]}
-cost["certiprec"] = alloc["cost"]
-# A100 dense peak (NVIDIA datasheet): BF16 312, TF32 156, FP32 (non-tensor) 19.5 TFLOPS
-peak = {"bf16": 312e12, "tf32": 156e12, "fp32": 19.5e12}
-tot = sum(flops)
-R["d_cost_model"] = {"tensor_core_products_relative_to_bf16x3": {k: v / cost["bf16x3"] for k, v in cost.items()},
-                     "ideal_A100_time_ratio_vs_fp32_simt": {**{k: (v / peak["bf16"]) / (tot / peak["fp32"]) for k, v in cost.items()},
-                                                            "tf32": (tot / peak["tf32"]) / (tot / peak["fp32"])},
-                     "note": "Peak-FLOP model only; ignores splitting/memory overhead. NOT a measured speedup."}
-json.dump(R, open(os.path.join(a.out, "results.json"), "w"), indent=1, default=str)
-print("saved")
+    def matmuls():
+        g = torch.Generator().manual_seed(0)
+        result = {}
+        for k in (16, 64, 256, 1024):
+            x = torch.randn(64, k, generator=g)
+            w = torch.randn(k, 64, generator=g) / math.sqrt(k)
+            ref = x.double() @ w.double()
+            result[k] = {}
+            for s in ('fp32', 'tf32', 'bf16x1', 'bf16x2', 'bf16x3', 'bf16x6'):
+                err = (P.emu_matmul_raw(x, w, s).double() - ref).abs()
+                bound = P.error_bound(x, w, s)
+                result[k][s] = {'rel_fro_err': float(err.norm() / ref.norm()),
+                                'max_abs_err': float(err.max()), 'bound_holds': bool((err <= bound).all()),
+                                'max_error_over_bound': float((err / bound).max())}
+        return result
+    mm = stage('matmul', matmuls)
+    x, e, f, box = cluster_configs(args.configs)
+    tick = time.perf_counter()
+    model, fit = fit_equivariant(x, e, f, box)
+    fit['seconds'] = time.perf_counter() - tick
+    write(out / 'fit.json', {'meta': meta, 'data': fit})
+    print('fit', fit, flush=True)
+    test = list(x[int(.8 * len(x)):])
+    calibration = test[:3]
+    count = len(prec_layers(model))
+    names = [getattr(m, 'name', 'readout') for m in prec_layers(model)]
+
+    def measure(policy, reference):
+        set_schemes(model, policy)
+        got = [model.energy_forces(p, box) for p in test]
+        return {'energy_rmse_per_atom': float(np.sqrt(np.mean([((float(a[0]) - float(b[0])) / len(x[0])) ** 2 for a, b in zip(got, reference)]))),
+                'force_rmse': float(np.sqrt(np.mean([(a[1].double() - b[1].double()).square().mean().item() for a, b in zip(got, reference)])))}
+
+    def layer_errors():
+        set_schemes(model, 'fp32')
+        reference = [model.energy_forces(p, box) for p in test]
+        uniform = {s: measure(s, reference) for s in ('bf16x1', 'bf16x2', 'bf16x3', 'bf16x6')}
+        per_layer = {}
+        for layer, name in enumerate(names):
+            per_layer[name] = {}
+            for s in ('bf16x1', 'bf16x2', 'bf16x3'):
+                policy = ['fp32'] * count
+                policy[layer] = s
+                per_layer[name][s] = measure(policy, reference)
+        q, _ = np.linalg.qr(np.random.default_rng(31).normal(size=(3, 3)))
+        q[:, 0] *= np.linalg.det(q)
+        rotation = {}
+        for s in ('fp32', 'bf16x1', 'bf16x3'):
+            set_schemes(model, s)
+            en, fo = model.energy_forces(test[0], box)
+            er, fr = model.energy_forces(test[0] @ q, box)
+            rotation[s] = {'energy_abs_error': abs(float(en - er)),
+                           'force_rms_error': float(np.sqrt(np.mean((fr.numpy() - fo.numpy() @ q) ** 2)))}
+        import cuequivariance_torch as cuet
+        generator = torch.Generator().manual_seed(7)
+        check = {}
+        for op in (model.sh, model.message, model.mix, model.square):
+            xs = [torch.randn(1 if i == 0 and op is not model.sh else 9, o.size, generator=generator)
+                  for i, o in enumerate(op.polynomial.inputs)]
+            op.scheme = 'fp32'
+            reference_op = cuet.SegmentedPolynomial(op.polynomial, method='naive', math_dtype=torch.float32)
+            with torch.no_grad():
+                check[op.name] = float((op(*xs) - reference_op(xs)[0]).abs().max())
+        return {'reference': 'FP32 same model', 'n_configs': len(test), 'layer_names': names,
+                'uniform': uniform, 'per_layer': per_layer, 'rotation': rotation,
+                'cue_torch_naive_max_abs_errors': check}
+    layers = stage('layer_errors', layer_errors)
+
+    def allocation():
+        floor, table, _ = C.sensitivity_table(model, calibration, box)
+        flops = C.layer_flops(model, len(x[0]))
+        high_score = C.predict_sigma(floor, table, ['bf16x3'] * count)
+        low_score = C.predict_sigma(floor, table, ['bf16x1'] * count)
+        budget = args.force_budget if args.force_budget is not None else max(2 * high_score, .03 * low_score)
+        proposal = C.allocate(floor, table, flops, budget)
+        certificate = C.certify_policy(model, calibration, box, proposal['policy'], budget)
+        if not certificate['budget_met']:
+            # Prefix interactions can invalidate the proposal score: actually check a fallback.
+            for fallback in ('bf16x3', 'bf16x6', 'fp32'):
+                policy = [fallback] * count
+                certificate = C.certify_policy(model, calibration, box, policy, budget)
+                if certificate['budget_met']:
+                    proposal = {'policy': policy, 'cost': C.policy_cost(flops, policy), 'fallback': True}
+                    break
+        if not certificate['budget_met']:
+            raise ValueError('Even the FP32 floor exceeds the requested budget.')
+        heldout = C.certify_policy(model, test[3:], box, proposal['policy'], budget)
+        return {**proposal, 'layer_names': names, 'fp32_floor_vs_fp64': floor,
+                'force_budget': budget, 'budget_rule': 'max(2*BF16x3 proposal, 0.03*BF16x1 proposal), unless specified',
+                'layer_flops_estimate': flops, 'per_layer_force_errors': {f'{l}:{s}': v for (l, s), v in table.items()},
+                'calibration_certificate': certificate, 'heldout_audit': heldout,
+                'cost_relative_to_uniform_bf16x3': proposal['cost'] / C.policy_cost(flops, ['bf16x3'] * count)}
+    alloc = stage('allocation', allocation)
+    policies = {'fp32': 'fp32', 'bf16x1': 'bf16x1', 'bf16x3': 'bf16x3', 'certiprec': alloc['policy']}
+    runs = {name: [] for name in policies}
+    for seed in range(args.seeds):
+        pos = test[seed % len(test)]
+        v = np.random.default_rng(100 + seed).normal(0, .05, pos.shape)
+        v -= v.mean(0)
+        for name, policy in policies.items():
+            def nve():
+                ts, hs, _, _ = run_nve(model, pos, v, box, policy, args.dt, args.steps, every=max(1, args.steps // 100))
+                drift, rms = drift_and_rms(ts, hs, len(pos))
+                return {'seed': seed, 'policy': policy, 'signed_drift_per_atom_time': drift,
+                        'detrended_rms_per_atom': rms, 'final_abs_dH_per_atom': abs(float(hs[-1] - hs[0])) / len(pos),
+                        'max_abs_dH_per_atom': float(np.max(np.abs(hs - hs[0]))) / len(pos),
+                        'time': ts.tolist(), 'dH_per_atom': ((hs - hs[0]) / len(pos)).tolist()}
+            run = stage(f'nve_seed{seed}_{name}', nve)
+            runs[name].append(run)
+            print(f'  seed {seed} {name}: drift={run["signed_drift_per_atom_time"]:.6g}', flush=True)
+    summary = {name: {'mean_abs_drift': float(np.mean([abs(r['signed_drift_per_atom_time']) for r in rr])),
+                      'mean_detrended_rms': float(np.mean([r['detrended_rms_per_atom'] for r in rr])),
+                      'rms_final_dH': float(np.sqrt(np.mean([r['final_abs_dH_per_atom'] ** 2 for r in rr])))}
+               for name, rr in runs.items()}
+    md = {'steps': args.steps, 'dt': args.dt, 'seeds': args.seeds, 'n_atoms': len(x[0]), 'units': 'LJ reduced',
+          'hamiltonian': 'FP64 evaluation of the same fitted model, not analytic LJ',
+          'initial_velocity_std': .05, 'summary': summary}
+    write(out / 'nve.json', {'meta': meta, 'data': md})
+    if args.torch_profiler:
+        set_schemes(model, 'bf16x3')
+        with profiling.torch_profile(True) as prof:
+            model.energy_forces(test[0], box)
+        (out / 'torch_profile.txt').write_text(prof.key_averages().table(sort_by='self_cpu_time_total', row_limit=20))
+    write(out / 'profiling.json', {'meta': meta, 'data': profiling.snapshot(),
+                                   'note': 'Inclusive CPU wall timers; nested matmul FLOPs are estimates; excludes backward FLOPs.'})
+    total = time.perf_counter() - started
+    write(out / 'results.json', {'meta': meta, 'matmul': mm, 'fit': fit, 'layers': layers,
+                                 'allocation': alloc, 'nve': md, 'invocation_seconds': total})
+    print('NVE', json.dumps(summary), flush=True)
+    print(f'Complete in {total:.1f}s. GPU results: PENDING.', flush=True)
+
+
+if __name__ == '__main__':
+    main()

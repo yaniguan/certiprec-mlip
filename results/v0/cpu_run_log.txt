@@ -1,0 +1,44 @@
+done matmul 0.01s
+fit {'method': 'fixed random equivariant features; energy+force linear least squares', 'n_train': 48, 'n_validation': 12, 'n_atoms': 8, 'parameters_fitted': 45, 'val_E_rmse_per_atom': 2.9295011890599806e-05, 'val_F_rmse': 0.0049955971594275, 'seconds': 1.880333895998774}
+opt_einsum_fx not available.
+To use the optimization, please install opt_einsum_fx.
+pip install opt_einsum_fx
+opt_einsum_fx not available.
+To use the optimization, please install opt_einsum_fx.
+pip install opt_einsum_fx
+opt_einsum_fx not available.
+To use the optimization, please install opt_einsum_fx.
+pip install opt_einsum_fx
+opt_einsum_fx not available.
+To use the optimization, please install opt_einsum_fx.
+pip install opt_einsum_fx
+done layer_errors 0.74s
+done allocation 0.50s
+done nve_seed0_fp32 1.73s
+  seed 0 fp32: drift=-4.10913e-06
+done nve_seed0_bf16x1 2.18s
+  seed 0 bf16x1: drift=0.000308308
+done nve_seed0_bf16x3 2.73s
+  seed 0 bf16x3: drift=-3.10055e-06
+done nve_seed0_certiprec 2.62s
+  seed 0 certiprec: drift=-3.08676e-05
+done nve_seed1_fp32 1.71s
+  seed 1 fp32: drift=-5.26769e-06
+done nve_seed1_bf16x1 2.14s
+  seed 1 bf16x1: drift=0.00011205
+done nve_seed1_bf16x3 2.89s
+  seed 1 bf16x3: drift=-4.99967e-06
+done nve_seed1_certiprec 2.96s
+  seed 1 certiprec: drift=1.92641e-05
+done nve_seed2_fp32 1.76s
+  seed 2 fp32: drift=-1.64324e-05
+done nve_seed2_bf16x1 2.26s
+  seed 2 bf16x1: drift=0.000396163
+done nve_seed2_bf16x3 2.71s
+  seed 2 bf16x3: drift=-1.47471e-05
+done nve_seed2_certiprec 2.70s
+  seed 2 certiprec: drift=7.5467e-05
+USDT:2026-11-04 00:03:36 1395950:1395950 SyncActivityProfilerHandler.cpp:39] profiler_start
+USDT:2026-11-04 00:03:36 1395950:1395950 SyncActivityProfilerHandler.cpp:46] profiler_stop
+NVE {"fp32": {"mean_abs_drift": 8.603077958583176e-06, "mean_detrended_rms": 2.5983529776506798e-05, "rms_final_dH": 4.1852189436071395e-05}, "bf16x1": {"mean_abs_drift": 0.0002721738776829498, "mean_detrended_rms": 0.0009995535251477547, "rms_final_dH": 0.0015548202102665402}, "bf16x3": {"mean_abs_drift": 7.615759885383922e-06, "mean_detrended_rms": 2.584895136971981e-05, "rms_final_dH": 3.853943652353335e-05}, "certiprec": {"mean_abs_drift": 4.1866233826397564e-05, "mean_detrended_rms": 2.542091001767464e-05, "rms_final_dH": 5.6514676036838314e-05}}
+Complete in 32.3s. GPU results: PENDING.

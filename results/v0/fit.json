@@ -1,0 +1,31 @@
+{
+  "meta": {
+    "run_id": "566e7c0cc7b964c6",
+    "source_hash": "e17c3dc0180b1f08",
+    "config": {
+      "steps": 600,
+      "dt": 0.002,
+      "seeds": 3,
+      "configs": 60,
+      "threads": 1,
+      "force_budget": null,
+      "quick": false
+    },
+    "torch": "2.15.0+cpu",
+    "numpy": "2.5.4",
+    "cuequivariance": "0.13.0",
+    "device": "cpu",
+    "gpu_status": "PENDING",
+    "date_utc": "2026-11-04T08:03:04Z"
+  },
+  "data": {
+    "method": "fixed random equivariant features; energy+force linear least squares",
+    "n_train": 48,
+    "n_validation": 12,
+    "n_atoms": 8,
+    "parameters_fitted": 45,
+    "val_E_rmse_per_atom": 2.9295011890599806e-05,
+    "val_F_rmse": 0.0049955971594275,
+    "seconds": 1.880333895998774
+  }
+}

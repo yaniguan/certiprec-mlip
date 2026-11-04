@@ -38,3 +38,23 @@ def test_autograd_backward_emulated():
     y = P.emu_matmul(x, w, "bf16x3"); y.sum().backward()
     ref = torch.ones(8, 4) @ w.t()
     assert torch.allclose(x.grad, ref, rtol=1e-5, atol=1e-5)
+
+
+def test_three_slice_exact_reconstruction():
+    g = torch.Generator().manual_seed(9)
+    x = torch.randn(4096, generator=g) * 10
+    parts = P.split_bf16(x, 3)
+    # Float64 sum avoids hiding a missing residual behind FP32 addition rounding.
+    assert torch.equal(sum(s.double() for s in parts), x.double())
+
+
+@pytest.mark.parametrize('scheme', ['bf16x1', 'bf16x2', 'bf16x3', 'bf16x6'])
+def test_batched_matmul_backward_and_bound(scheme):
+    g = torch.Generator().manual_seed(91)
+    x = torch.randn(3, 4, 12, generator=g, requires_grad=True)
+    w = torch.randn(1, 12, 5, generator=g, requires_grad=True)
+    y = P.emu_matmul(x, w, scheme)
+    y.sum().backward()
+    assert w.grad.shape == w.shape and x.grad.shape == x.shape
+    exact = x.detach().double() @ w.detach().double()
+    assert ((y.detach().double() - exact).abs() <= P.error_bound(x.detach(), w.detach(), scheme)).all()

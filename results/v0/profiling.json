@@ -1,0 +1,49 @@
+{
+  "meta": {
+    "run_id": "566e7c0cc7b964c6",
+    "source_hash": "e17c3dc0180b1f08",
+    "config": {
+      "steps": 600,
+      "dt": 0.002,
+      "seeds": 3,
+      "configs": 60,
+      "threads": 1,
+      "force_budget": null,
+      "quick": false
+    },
+    "torch": "2.15.0+cpu",
+    "numpy": "2.5.4",
+    "cuequivariance": "0.13.0",
+    "device": "cpu",
+    "gpu_status": "PENDING",
+    "date_utc": "2026-11-04T08:03:04Z"
+  },
+  "data": {
+    "spherical_harmonics": {
+      "calls": 8882,
+      "seconds": 2.8360709265689366,
+      "flops": 6501448
+    },
+    "edge_tensor_product": {
+      "calls": 8882,
+      "seconds": 4.573832439346006,
+      "flops": 659278800
+    },
+    "atom_linear": {
+      "calls": 8882,
+      "seconds": 2.4776607996609528,
+      "flops": 100320000
+    },
+    "quadratic_invariants": {
+      "calls": 8882,
+      "seconds": 3.6389573815104086,
+      "flops": 125215680
+    },
+    "readout": {
+      "calls": 8833,
+      "seconds": 0.38841236614098307,
+      "flops": 11426624
+    }
+  },
+  "note": "Inclusive CPU wall timers; nested matmul FLOPs are estimates; excludes backward FLOPs."
+}

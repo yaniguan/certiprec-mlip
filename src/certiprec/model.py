@@ -22,6 +22,8 @@ class RadialMLIP(nn.Module):
         self.register_buffer("e_shift", torch.zeros(()))
         dims = [n_rbf] + [width] * depth + [1]
         self.layers = nn.ModuleList(PrecLinear(a, b) for a, b in zip(dims[:-1], dims[1:]))
+        for i, layer in enumerate(self.layers):
+            layer.profile_name = f'radial_linear_{i}'
 
     def descriptors(self, pos, box):
         d = pos[:, None, :] - pos[None, :, :]

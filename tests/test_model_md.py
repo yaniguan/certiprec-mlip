@@ -45,5 +45,6 @@ def test_certificate_roundtrip_and_allocation():
     floor = 1e-6; table = {(l, s): v for l in range(2) for s, v in
                            [("bf16x1", 1e-2), ("bf16x3", 1e-5), ("bf16x6", 2e-6)]}
     table[(1, "bf16x1")] = 1e-6 * 1.5  # layer 1 insensitive
-    out = C.allocate(floor, table, [100, 100], budget=5e-5)
+    out = C.allocate(floor, table, [100, 100], budget=5e-5,
+                     candidates=("bf16x1", "bf16x3", "bf16x6"))
     assert out["policy"] == ["bf16x3", "bf16x1"]
